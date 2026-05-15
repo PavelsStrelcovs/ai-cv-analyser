@@ -17,6 +17,15 @@ textarea {
   font: inherit;
 }
 
+.ps-mark {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #e85d75;
+  text-transform: none;
+}
+
 @keyframes fade-slide-up {
   from {
     opacity: 0;

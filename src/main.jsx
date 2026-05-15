@@ -3,10 +3,16 @@ import { createRoot } from "react-dom/client";
 import {
   AlertCircle,
   BarChart3,
+  BriefcaseBusiness,
+  Building2,
   CheckCircle2,
   Clock3,
+  Code2,
   FileText,
+  GraduationCap,
+  HeartPulse,
   Loader2,
+  PanelTop,
   Sparkles,
   Trash2,
   TrendingUp,
@@ -16,6 +22,114 @@ import {
 import "./styles.css";
 
 const HISTORY_KEY = "resumeiq.reviewHistory.v1";
+
+const cvTemplates = [
+  {
+    industry: "IT & Software",
+    role: "Junior Software Developer",
+    icon: Code2,
+    accent: "from-blue-500 to-teal-500",
+    sections: ["Profile", "Technical Skills", "Projects", "Experience", "Education", "Certifications"],
+    keywords: ["JavaScript", "React", "Node.js", "Git", "APIs", "Testing", "SQL"],
+    profile:
+      "Junior software developer with hands-on experience building responsive web applications using React, Node.js and REST APIs. Strong problem solver with a portfolio of projects, clean Git habits and a focus on accessible, maintainable code.",
+    bullets: [
+      "Built a full-stack web app using React, Express and a REST API, improving confidence with component design and backend routing.",
+      "Used Git and GitHub for version control, feature branches and deployment-ready project documentation.",
+      "Implemented form validation, loading states and error handling to improve reliability and user experience."
+    ]
+  },
+  {
+    industry: "Data & Analytics",
+    role: "Graduate Data Analyst",
+    icon: BarChart3,
+    accent: "from-teal-500 to-emerald-500",
+    sections: ["Profile", "Analytical Skills", "Projects", "Experience", "Education", "Tools"],
+    keywords: ["SQL", "Excel", "Power BI", "Python", "Dashboards", "Data cleaning", "Insights"],
+    profile:
+      "Graduate data analyst with experience cleaning, analysing and visualising datasets to support better decisions. Comfortable with SQL, Excel, dashboarding and presenting clear insights to non-technical audiences.",
+    bullets: [
+      "Cleaned and analysed large datasets using SQL and Excel to identify trends, anomalies and improvement opportunities.",
+      "Created interactive dashboards to communicate KPIs and make performance data easier to monitor.",
+      "Presented findings with clear recommendations, linking analysis to business impact."
+    ]
+  },
+  {
+    industry: "Business & Finance",
+    role: "Finance Assistant",
+    icon: BriefcaseBusiness,
+    accent: "from-amber-500 to-rose-500",
+    sections: ["Profile", "Key Skills", "Experience", "Education", "Achievements", "Systems"],
+    keywords: ["Excel", "Reporting", "Reconciliation", "Budgeting", "Accuracy", "Stakeholders"],
+    profile:
+      "Detail-oriented finance graduate with strong Excel, reporting and numerical analysis skills. Able to work accurately under deadlines, support reconciliations and communicate financial information clearly.",
+    bullets: [
+      "Prepared accurate spreadsheet reports, checking figures and resolving inconsistencies before submission.",
+      "Supported invoice tracking and reconciliation tasks while maintaining clear records.",
+      "Worked with stakeholders to gather missing information and keep reporting deadlines on track."
+    ]
+  },
+  {
+    industry: "Marketing",
+    role: "Digital Marketing Assistant",
+    icon: PanelTop,
+    accent: "from-pink-500 to-orange-500",
+    sections: ["Profile", "Marketing Skills", "Campaigns", "Experience", "Education", "Tools"],
+    keywords: ["SEO", "Analytics", "Content", "Social media", "Campaigns", "Canva", "Email"],
+    profile:
+      "Creative digital marketing graduate with experience supporting content, social media and campaign reporting. Confident using analytics to understand performance and improve engagement.",
+    bullets: [
+      "Created social content calendars and campaign assets aligned with brand tone and audience needs.",
+      "Tracked campaign performance using analytics tools and summarised results for stakeholders.",
+      "Improved content quality by applying SEO basics, clear calls to action and consistent formatting."
+    ]
+  },
+  {
+    industry: "Healthcare",
+    role: "Healthcare Assistant",
+    icon: HeartPulse,
+    accent: "from-emerald-500 to-cyan-500",
+    sections: ["Profile", "Care Skills", "Experience", "Training", "Education", "Safeguarding"],
+    keywords: ["Patient care", "Communication", "Safeguarding", "Confidentiality", "Teamwork", "Records"],
+    profile:
+      "Compassionate healthcare candidate with strong communication, teamwork and patient care awareness. Committed to confidentiality, safeguarding and providing reliable support in busy care environments.",
+    bullets: [
+      "Supported service users with dignity, patience and clear communication.",
+      "Maintained accurate records and followed confidentiality procedures.",
+      "Worked calmly with colleagues to prioritise care tasks in a fast-paced setting."
+    ]
+  },
+  {
+    industry: "Education",
+    role: "Teaching Assistant",
+    icon: GraduationCap,
+    accent: "from-indigo-500 to-blue-500",
+    sections: ["Profile", "Classroom Skills", "Experience", "Education", "Training", "Achievements"],
+    keywords: ["Lesson support", "Safeguarding", "SEN", "Behaviour", "Communication", "Planning"],
+    profile:
+      "Supportive education candidate with experience helping learners stay engaged, organised and confident. Strong communicator with awareness of safeguarding, inclusion and classroom routines.",
+    bullets: [
+      "Supported small groups and individual learners with class activities and confidence building.",
+      "Helped maintain a positive classroom environment through calm communication and consistency.",
+      "Prepared learning materials and supported teachers with lesson organisation."
+    ]
+  },
+  {
+    industry: "Retail & Customer Service",
+    role: "Customer Service Advisor",
+    icon: Building2,
+    accent: "from-coral to-gold",
+    sections: ["Profile", "Customer Skills", "Experience", "Achievements", "Education", "Systems"],
+    keywords: ["Customer service", "Sales", "Complaints", "Communication", "Targets", "POS"],
+    profile:
+      "Reliable customer service candidate with strong communication, problem solving and sales awareness. Experienced in helping customers, resolving issues and contributing to team targets.",
+    bullets: [
+      "Handled customer queries professionally, resolving issues and escalating complex cases when needed.",
+      "Maintained product knowledge to support confident recommendations and improved customer experience.",
+      "Worked flexibly with team members to meet service standards during busy periods."
+    ]
+  }
+];
 
 const emptyAnalysis = {
   score: 0,
@@ -28,6 +142,7 @@ const emptyAnalysis = {
 };
 
 function App() {
+  const [activeView, setActiveView] = useState("analyser");
   const [file, setFile] = useState(null);
   const [jobDescription, setJobDescription] = useState("");
   const [analysis, setAnalysis] = useState(emptyAnalysis);
@@ -123,8 +238,10 @@ function App() {
       <div className="mx-auto grid max-w-7xl gap-6">
         <header className="animate-in flex flex-col gap-5 border-b border-white/70 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="mb-3 inline-flex rounded-full border border-teal-200 bg-white/70 px-3 py-1 text-sm font-black uppercase text-mint shadow-sm backdrop-blur">ResumeIQ</p>
-            <h1 className="bg-gradient-to-r from-slate-950 via-teal-900 to-coral bg-clip-text text-4xl font-black leading-none tracking-normal text-transparent sm:text-6xl">
+            <p className="mb-3 inline-flex rounded-full border border-teal-200 bg-white/70 px-3 py-1 text-sm font-black uppercase text-mint shadow-sm backdrop-blur">
+              CV Builder by <span className="ps-mark ml-1">PS</span>
+            </p>
+            <h1 className="pb-2 bg-gradient-to-r from-slate-950 via-teal-900 to-coral bg-clip-text text-4xl font-black leading-[1.08] tracking-normal text-transparent sm:text-6xl">
               Build a better CV with every upload
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600">
@@ -137,6 +254,26 @@ function App() {
           </div>
         </header>
 
+        <nav className="animate-in flex flex-wrap gap-2" style={{ animationDelay: "60ms" }} aria-label="Main sections">
+          <button
+            className={`min-h-11 rounded-lg px-4 text-sm font-black transition ${activeView === "analyser" ? "bg-ink text-white shadow-soft" : "border border-white/80 bg-white/80 text-slate-700 hover:bg-white"}`}
+            type="button"
+            onClick={() => setActiveView("analyser")}
+          >
+            AI CV Analyser
+          </button>
+          <button
+            className={`min-h-11 rounded-lg px-4 text-sm font-black transition ${activeView === "templates" ? "bg-ink text-white shadow-soft" : "border border-white/80 bg-white/80 text-slate-700 hover:bg-white"}`}
+            type="button"
+            onClick={() => setActiveView("templates")}
+          >
+            CV Templates
+          </button>
+        </nav>
+
+        {activeView === "templates" ? (
+          <TemplatesPage />
+        ) : (
         <section className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <div className="animate-in grid gap-5" style={{ animationDelay: "90ms" }}>
             <UploadPanel
@@ -188,8 +325,114 @@ function App() {
 
           <Results analysis={analysis} meta={meta} matchLabel={matchLabel} progressDelta={progressDelta} />
         </section>
+        )}
       </div>
     </main>
+  );
+}
+
+function TemplatesPage() {
+  const [selectedTemplate, setSelectedTemplate] = useState(cvTemplates[0]);
+
+  return (
+    <section className="animate-in grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]" style={{ animationDelay: "90ms" }}>
+      <div className="grid gap-4">
+        <section className="rounded-lg border border-white/80 bg-white/85 p-5 shadow-soft backdrop-blur">
+          <p className="text-sm font-black uppercase text-mint">Template library</p>
+          <h2 className="mt-2 text-3xl font-black leading-tight text-slate-950">Choose a strong structure for your industry</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Use these as starter CV layouts, then upload the finished PDF back into the analyser to measure your progress.
+          </p>
+        </section>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {cvTemplates.map(template => {
+            const Icon = template.icon;
+            const isSelected = selectedTemplate.industry === template.industry;
+
+            return (
+              <button
+                className={`group rounded-lg border p-4 text-left shadow-soft transition duration-300 hover:-translate-y-1 ${
+                  isSelected ? "border-teal-300 bg-teal-50/90" : "border-white/80 bg-white/80 hover:bg-white"
+                }`}
+                type="button"
+                key={template.industry}
+                onClick={() => setSelectedTemplate(template)}
+              >
+                <span className={`mb-3 inline-flex h-11 w-11 items-center justify-center rounded-lg bg-gradient-to-r ${template.accent} text-white shadow-sm transition group-hover:scale-105`}>
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <h3 className="text-base font-black text-slate-950">{template.industry}</h3>
+                <p className="mt-1 text-sm font-bold text-slate-500">{template.role}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <TemplatePreview template={selectedTemplate} />
+    </section>
+  );
+}
+
+function TemplatePreview({ template }) {
+  return (
+    <section className="rounded-lg border border-white/80 bg-white/90 p-5 shadow-glow backdrop-blur">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-black uppercase text-mint">{template.industry}</p>
+          <h2 className="mt-1 text-2xl font-black text-slate-950">{template.role}</h2>
+        </div>
+        <span className={`inline-flex rounded-full bg-gradient-to-r ${template.accent} px-3 py-1 text-xs font-black uppercase text-white shadow-sm`}>
+          ATS friendly
+        </span>
+      </div>
+
+      <div className="grid gap-5">
+        <PreviewBlock title="Suggested sections">
+          <div className="flex flex-wrap gap-2">
+            {template.sections.map(section => (
+              <span className="rounded-full bg-pearl px-3 py-1 text-sm font-bold text-slate-700" key={section}>
+                {section}
+              </span>
+            ))}
+          </div>
+        </PreviewBlock>
+
+        <PreviewBlock title="Profile example">
+          <p className="rounded-lg bg-teal-50/80 p-4 text-sm leading-6 text-slate-700">{template.profile}</p>
+        </PreviewBlock>
+
+        <PreviewBlock title="Achievement bullet examples">
+          <ul className="grid gap-2">
+            {template.bullets.map(bullet => (
+              <li className="rounded-r-lg border-l-4 border-mint bg-white/80 px-4 py-3 text-sm leading-6 text-slate-700" key={bullet}>
+                {bullet}
+              </li>
+            ))}
+          </ul>
+        </PreviewBlock>
+
+        <PreviewBlock title="Keywords to include">
+          <div className="flex flex-wrap gap-2">
+            {template.keywords.map(keyword => (
+              <span className="rounded-full border border-teal-100 bg-white px-3 py-1 text-sm font-black text-mint" key={keyword}>
+                {keyword}
+              </span>
+            ))}
+          </div>
+        </PreviewBlock>
+      </div>
+    </section>
+  );
+}
+
+function PreviewBlock({ title, children }) {
+  return (
+    <div>
+      <h3 className="mb-3 text-sm font-black uppercase text-slate-500">{title}</h3>
+      {children}
+    </div>
   );
 }
 

@@ -21,6 +21,15 @@ The core workflow is:
 
 The app also includes a CV templates page for common industries such as IT, data, finance, marketing, healthcare, education and retail.
 
+Recent improvements added:
+
+- local job description matching without extra OpenAI calls
+- downloadable text review reports
+- richer local progress history with delete and trend stats
+- API rate limiting to protect OpenAI usage
+- backend helper tests with Node's built-in test runner
+- React split into components, data and utility modules
+
 ## 2. Tech Stack
 
 Frontend:
@@ -51,15 +60,36 @@ Deployment:
 
 `src/main.jsx`
 
-This is the main React app. It controls:
+This is the main React app. It now acts mostly as the orchestrator. It controls:
 
 - View switching between the analyser page and templates page
-- PDF upload UI
-- Drag-and-drop behaviour
 - Calling `/api/analyse`
-- Showing results
 - Saving review history in `localStorage`
-- CV template data and template preview UI
+- passing state into components
+- local job matching from the job description field
+
+`src/components/`
+
+Main frontend components:
+
+- `UploadPanel.jsx`: PDF upload, drag-and-drop and privacy note
+- `Results.jsx`: score cards, AI feedback, local match display and report download
+- `HistoryPanel.jsx`: last 5 reviews, trend stats and delete/clear actions
+- `TemplatesPage.jsx`: industry CV templates and template preview
+- `ScoreCard.jsx`: reusable score display
+- `InsightList.jsx`: reusable feedback list
+
+`src/data/cvTemplates.js`
+
+Stores the static CV template data. This is frontend-only and does not use OpenAI.
+
+`src/utils/`
+
+Utility files:
+
+- `history.js`: load/migrate local review history and format dates
+- `jobMatch.js`: local keyword matching against pasted job descriptions
+- `exportReport.js`: creates a downloadable text report in the browser
 
 `src/styles.css`
 
@@ -81,6 +111,7 @@ This is the main backend application. It controls:
 - OpenAI request
 - JSON parsing and validation
 - Temporary cache for repeated uploads
+- Basic IP-based rate limiting
 - Error handling
 
 `server/index.js`
@@ -100,6 +131,7 @@ Defines dependencies and scripts:
 - `npm run server` starts Express
 - `npm run build` builds the production frontend
 - `npm run check` checks backend JavaScript syntax
+- `npm test` runs backend helper tests
 
 `.env.example`
 
@@ -112,6 +144,10 @@ Prevents sensitive and generated files from being pushed:
 - `.env`
 - `node_modules/`
 - `dist/`
+
+`test/app.test.js`
+
+Backend helper tests using Node's built-in `node:test` module. These cover text cleaning, text capping, JSON parsing and normalization helpers.
 
 ## 4. Frontend Flow
 
@@ -145,6 +181,8 @@ When the user clicks Analyse:
 
 The frontend never calls OpenAI directly. It only calls the backend route.
 
+The job description field is used for local keyword matching after analysis. This does not increase OpenAI usage because the job description is not sent to OpenAI in the optimized version.
+
 ## 5. Backend Flow
 
 The backend route is:
@@ -164,12 +202,13 @@ Backend steps:
 4. `prepareCvText()` cleans and limits the text.
 5. The backend checks that extracted text is not empty.
 6. The backend checks `OPENAI_API_KEY` exists.
-7. The cleaned CV text is hashed with SHA-256.
-8. The cache is checked.
-9. If cached, the backend returns the saved analysis.
-10. If not cached, OpenAI is called.
-11. The OpenAI response is parsed and normalized.
-12. The result is returned to the frontend.
+7. The route checks a basic per-IP rate limit.
+8. The cleaned CV text is hashed with SHA-256.
+9. The cache is checked.
+10. If cached, the backend returns the saved analysis.
+11. If not cached, OpenAI is called.
+12. The OpenAI response is parsed, validated and normalized.
+13. The result is returned to the frontend.
 
 Response shape:
 
@@ -268,6 +307,10 @@ The backend hashes the cleaned CV text and stores the result for 30 minutes.
 
 If the same cleaned CV is uploaded again, the backend returns the cached result instead of calling OpenAI again.
 
+7. Local job matching
+
+The job description matching is calculated in the browser using keyword overlap. It is deliberately not included in the OpenAI prompt, so it does not increase OpenAI token usage.
+
 Cache details:
 
 - `analysisCache` is an in-memory `Map`
@@ -286,6 +329,7 @@ The backend handles:
 - Empty extracted text
 - Missing OpenAI API key
 - OpenAI rate limit
+- Local route rate limit
 - Unexpected server errors
 
 The frontend catches failed API responses and shows the error in the UI.
@@ -296,6 +340,29 @@ Examples:
 - "No readable CV text was found."
 - "OPENAI_API_KEY is missing."
 - "OpenAI rate limit reached."
+- "Too many analyses from this browser."
+
+## 8a. Local Job Matching
+
+The app includes local job description matching.
+
+How it works:
+
+1. User pastes a job description in the frontend.
+2. After CV analysis, the frontend compares the extracted CV preview and AI missing keywords against the job description.
+3. `src/utils/jobMatch.js` extracts common keywords from the job description.
+4. It calculates:
+   - `matchScore`
+   - `matchedKeywords`
+   - `missingKeywords`
+
+This feature does not call OpenAI and therefore does not increase API cost.
+
+Tradeoff:
+
+- It is cheaper and instant.
+- It is less semantically smart than AI matching.
+- It is still useful for ATS-style keyword coverage.
 
 ## 9. Review History
 
@@ -318,6 +385,14 @@ The app stores only a compact review summary:
 
 It does not store the full extracted CV text.
 
+Added progress features:
+
+- delete individual saved reviews
+- clear all history
+- show best score
+- show overall trend from oldest to newest saved review
+- show how many of the 5 slots are used
+
 Why this is useful:
 
 - user can refresh the page and keep progress
@@ -332,7 +407,7 @@ Tradeoff:
 
 ## 10. Templates Page
 
-The templates page is stored in `src/main.jsx` as `cvTemplates`.
+The templates page uses static data from `src/data/cvTemplates.js`.
 
 Each template contains:
 
@@ -390,6 +465,18 @@ OPENAI_MODEL=gpt-4o-mini
 
 Do not add `PORT` on Vercel.
 
+## 11a. Report Export
+
+The app can download a text report after analysis.
+
+This happens entirely in the browser:
+
+1. `Results.jsx` calls `downloadReviewReport()`.
+2. `exportReport.js` creates a plain text report.
+3. The browser downloads it using a temporary `Blob` URL.
+
+No backend call is made, and no OpenAI credits are used.
+
 ## 12. Security Notes
 
 The main security decision is keeping the API key on the backend.
@@ -402,10 +489,12 @@ Good practices already included:
 - file uploads are limited to PDFs
 - uploaded files are stored in memory rather than saved to disk
 - file size limit is 6 MB
+- API route has a basic rate limit
+- OpenAI JSON is validated before being used
 
 Things that could be improved later:
 
-- rate limit the API route by IP
+- move rate limiting to Redis or a hosted store for production reliability
 - add CAPTCHA or abuse protection
 - scan uploaded files more deeply
 - add persistent database storage if accounts are introduced
@@ -424,6 +513,7 @@ PDF only:
 - fits the MVP
 - real CVs are often PDFs
 - scanned PDFs may fail because `pdf-parse` needs embedded text
+- OCR was not added because a reliable production OCR pipeline would add complexity and may require another service. The app instead handles empty scanned PDFs clearly and explains the issue to the user.
 
 AI feedback:
 
@@ -447,7 +537,7 @@ Static templates:
 
 Good short explanation:
 
-"This is a full-stack CV analyser. The user uploads a PDF, the backend extracts text using pdf-parse, cleans and caps it to control cost, sends it to OpenAI using a cheap model, then returns structured JSON feedback. The frontend displays the ATS score and suggestions, and stores the last five reviews locally so users can track progress without needing an account."
+"This is a full-stack CV analyser. The user uploads a PDF, the backend extracts text using pdf-parse, cleans and caps it to control cost, sends it to OpenAI using a cheap model, then returns structured JSON feedback. The frontend displays the ATS score and suggestions, calculates job matching locally, and stores the last five reviews locally so users can track progress without needing an account."
 
 If asked why React:
 
@@ -463,11 +553,11 @@ If asked why localStorage:
 
 If asked about cost:
 
-"I reduced cost by using `gpt-4o-mini`, cleaning and capping the CV text, keeping the prompt short, limiting output tokens and caching repeated uploads."
+"I reduced cost by using `gpt-4o-mini`, cleaning and capping the CV text, keeping the prompt short, limiting output tokens, caching repeated uploads and doing job description matching locally instead of sending it to OpenAI."
 
 If asked about limitations:
 
-"The main limitation is scanned PDFs. If a PDF is just an image, `pdf-parse` may not extract useful text. The next step would be OCR. Also, the cache is in memory, so a production system might use Redis or a database."
+"The main limitation is scanned PDFs. If a PDF is just an image, `pdf-parse` may not extract useful text. The next step would be OCR using a dedicated OCR tool or service. Also, the cache and rate limit are in memory, so a production system might use Redis or a database."
 
 If asked about privacy:
 
@@ -476,12 +566,11 @@ If asked about privacy:
 If asked what you would improve:
 
 - Add OCR for scanned CVs
-- Add job description matching again in the optimized prompt
-- Add user-controlled export of feedback
+- Improve local job description matching with weighted phrases
 - Add schema validation with Zod
-- Add API rate limiting
+- Move API rate limiting to persistent storage
 - Add database-backed accounts if persistent history is needed
-- Add tests for backend validation and parsing
+- Add more tests around file upload and API errors
 
 ## 15. Quick Architecture Diagram
 
@@ -514,7 +603,7 @@ Express normalizes response
   |
   | JSON result
   v
-React displays feedback + saves summary to localStorage
+React displays feedback + calculates local job match + saves summary to localStorage
 ```
 
 ## 16. Commands To Remember
@@ -535,6 +624,12 @@ Backend syntax check:
 
 ```bash
 npm run check
+```
+
+Tests:
+
+```bash
+npm test
 ```
 
 Commit and push:

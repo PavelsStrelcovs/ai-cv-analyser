@@ -7,7 +7,10 @@ import pdfParse from "pdf-parse";
 
 const CV_TEXT_LIMIT = 10000;
 const CACHE_TTL_MS = 1000 * 60 * 30;
+const RATE_LIMIT_WINDOW_MS = 1000 * 60 * 60;
+const RATE_LIMIT_MAX = 8;
 const analysisCache = new Map();
+const rateLimitStore = new Map();
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -32,7 +35,7 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "ResumeIQ API" });
 });
 
-app.post("/api/analyse", upload.single("cv"), async (req, res) => {
+app.post("/api/analyse", rateLimit, upload.single("cv"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "Upload a PDF CV to analyse." });
@@ -86,7 +89,7 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: error.message || "Unexpected server error." });
 });
 
-async function extractPdfText(buffer) {
+export async function extractPdfText(buffer) {
   try {
     return await pdfParse(buffer);
   } catch {
@@ -96,7 +99,7 @@ async function extractPdfText(buffer) {
   }
 }
 
-function cleanText(text) {
+export function cleanText(text) {
   return String(text || "")
     .replace(/\u0000/g, "")
     .replace(/[ \t]+/g, " ")
@@ -104,7 +107,7 @@ function cleanText(text) {
     .trim();
 }
 
-function prepareCvText(text) {
+export function prepareCvText(text) {
   // Cost saving: normalize whitespace and cap the CV before sending it to OpenAI.
   return cleanText(text).slice(0, CV_TEXT_LIMIT).trim();
 }
@@ -136,13 +139,14 @@ ${cvText}`;
   return parseJsonAnalysis(content);
 }
 
-function parseJsonAnalysis(content) {
+export function parseJsonAnalysis(content) {
   const jsonText = content.match(/\{[\s\S]*\}/)?.[0];
   if (!jsonText) {
     throw new Error("The AI response did not contain valid JSON.");
   }
 
   const parsed = JSON.parse(jsonText);
+  validateAnalysisShape(parsed);
   return {
     atsScore: clampScore(parsed.atsScore),
     strengths: normalizeList(parsed.strengths),
@@ -152,11 +156,11 @@ function parseJsonAnalysis(content) {
   };
 }
 
-function normalizeList(value) {
+export function normalizeList(value) {
   return Array.isArray(value) ? value.map(String).filter(Boolean).slice(0, 8) : [];
 }
 
-function clampScore(value) {
+export function clampScore(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 0;
   return Math.max(0, Math.min(100, Math.round(number)));
@@ -180,9 +184,42 @@ function setCachedAnalysis(key, analysis) {
   analysisCache.set(key, { analysis, createdAt: Date.now() });
 }
 
+function rateLimit(req, res, next) {
+  const key = req.ip || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const current = rateLimitStore.get(key) || { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+
+  if (now > current.resetAt) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    next();
+    return;
+  }
+
+  if (current.count >= RATE_LIMIT_MAX) {
+    res.status(429).json({ error: "Too many analyses from this browser. Please try again later." });
+    return;
+  }
+
+  current.count += 1;
+  rateLimitStore.set(key, current);
+  next();
+}
+
+function validateAnalysisShape(value) {
+  const requiredArrays = ["strengths", "weaknesses", "missingKeywords", "suggestions"];
+  if (!Number.isFinite(Number(value.atsScore))) {
+    throw new Error("The AI response did not include a valid ATS score.");
+  }
+  for (const key of requiredArrays) {
+    if (!Array.isArray(value[key])) {
+      throw new Error(`The AI response did not include a valid ${key} list.`);
+    }
+  }
+}
+
 function statusForError(error) {
-  if (error.status) return error.status;
   if (error.status === 429 || error.code === "rate_limit_exceeded") return 429;
+  if (error.status) return error.status;
   return 500;
 }
 

@@ -1,8 +1,13 @@
+import crypto from "node:crypto";
 import cors from "cors";
 import express from "express";
 import multer from "multer";
 import OpenAI from "openai";
 import pdfParse from "pdf-parse";
+
+const CV_TEXT_LIMIT = 10000;
+const CACHE_TTL_MS = 1000 * 60 * 30;
+const analysisCache = new Map();
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -33,13 +38,12 @@ app.post("/api/analyse", upload.single("cv"), async (req, res) => {
       return res.status(400).json({ error: "Upload a PDF CV to analyse." });
     }
 
-    const parsedPdf = await pdfParse(req.file.buffer);
-    const cvText = cleanText(parsedPdf.text);
-    const jobDescription = cleanText(req.body.jobDescription || "");
+    const parsedPdf = await extractPdfText(req.file.buffer);
+    const cvText = prepareCvText(parsedPdf.text);
 
-    if (cvText.length < 300) {
+    if (!cvText) {
       return res.status(400).json({
-        error: "The PDF text is too short to analyse. Try a text-based CV rather than a scanned image."
+        error: "No readable CV text was found. Try a text-based PDF rather than a scanned image."
       });
     }
 
@@ -49,20 +53,24 @@ app.post("/api/analyse", upload.single("cv"), async (req, res) => {
       });
     }
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const analysis = await analyseCvWithOpenAI(client, cvText, jobDescription);
+    const cacheKey = hashText(cvText);
+    const cached = getCachedAnalysis(cacheKey);
+    const analysis = cached || await analyseCvWithOpenAI(new OpenAI({ apiKey: process.env.OPENAI_API_KEY }), cvText);
+
+    if (!cached) {
+      setCachedAnalysis(cacheKey, analysis);
+    }
 
     res.json({
       fileName: req.file.originalname,
       wordCount: cvText.split(/\s+/).filter(Boolean).length,
       extractedTextPreview: cvText.slice(0, 700),
+      cached: Boolean(cached),
       analysis
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      error: error.message || "Something went wrong while analysing the CV."
-    });
+    res.status(statusForError(error)).json({ error: messageForError(error) });
   }
 });
 
@@ -78,6 +86,16 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: error.message || "Unexpected server error." });
 });
 
+async function extractPdfText(buffer) {
+  try {
+    return await pdfParse(buffer);
+  } catch {
+    const error = new Error("Invalid PDF. Please upload a readable PDF file.");
+    error.status = 400;
+    throw error;
+  }
+}
+
 function cleanText(text) {
   return String(text || "")
     .replace(/\u0000/g, "")
@@ -86,48 +104,36 @@ function cleanText(text) {
     .trim();
 }
 
-async function analyseCvWithOpenAI(client, cvText, jobDescription) {
-  const prompt = `You are ResumeIQ, an expert graduate CV and ATS reviewer.
+function prepareCvText(text) {
+  // Cost saving: normalize whitespace and cap the CV before sending it to OpenAI.
+  return cleanText(text).slice(0, CV_TEXT_LIMIT).trim();
+}
 
-Analyse the CV text below${jobDescription ? " against the target job description" : ""}.
+async function analyseCvWithOpenAI(client, cvText) {
+  // Cost saving: short prompt, cheap default model, JSON-only response and bounded output.
+  const prompt = `You are an ATS CV reviewer. Analyze the CV below.
 
-Return strict JSON only, with this exact shape:
+Return JSON only:
 {
-  "score": number,
   "atsScore": number,
-  "summary": string,
   "strengths": string[],
   "weaknesses": string[],
-  "missingSkills": string[],
-  "suggestedImprovements": string[]
+  "missingKeywords": string[],
+  "suggestions": string[]
 }
-
-Rules:
-- Scores must be integers from 0 to 100.
-- Give practical, specific feedback suitable for a graduate portfolio project.
-- Mention ATS structure, measurable achievements, keywords, clarity and relevance.
-- Do not invent experience that is not in the CV.
 
 CV:
-${cvText.slice(0, 14000)}
+${cvText}`;
 
-${jobDescription ? `Target job description:\n${jobDescription.slice(0, 5000)}` : ""}`;
-
-  const response = await client.responses.create({
-    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-    input: prompt
+  const response = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+    response_format: { type: "json_object" },
+    max_tokens: 650
   });
 
-  const content = response.output_text || extractTextFromResponse(response);
+  const content = response.choices?.[0]?.message?.content || "";
   return parseJsonAnalysis(content);
-}
-
-function extractTextFromResponse(response) {
-  return (response.output || [])
-    .flatMap(item => item.content || [])
-    .map(part => part.text || "")
-    .join("\n")
-    .trim();
 }
 
 function parseJsonAnalysis(content) {
@@ -138,13 +144,11 @@ function parseJsonAnalysis(content) {
 
   const parsed = JSON.parse(jsonText);
   return {
-    score: clampScore(parsed.score),
     atsScore: clampScore(parsed.atsScore),
-    summary: String(parsed.summary || "Analysis complete."),
     strengths: normalizeList(parsed.strengths),
     weaknesses: normalizeList(parsed.weaknesses),
-    missingSkills: normalizeList(parsed.missingSkills),
-    suggestedImprovements: normalizeList(parsed.suggestedImprovements)
+    missingKeywords: normalizeList(parsed.missingKeywords),
+    suggestions: normalizeList(parsed.suggestions)
   };
 }
 
@@ -156,4 +160,35 @@ function clampScore(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 0;
   return Math.max(0, Math.min(100, Math.round(number)));
+}
+
+function hashText(text) {
+  return crypto.createHash("sha256").update(text).digest("hex");
+}
+
+function getCachedAnalysis(key) {
+  const cached = analysisCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.createdAt > CACHE_TTL_MS) {
+    analysisCache.delete(key);
+    return null;
+  }
+  return cached.analysis;
+}
+
+function setCachedAnalysis(key, analysis) {
+  analysisCache.set(key, { analysis, createdAt: Date.now() });
+}
+
+function statusForError(error) {
+  if (error.status) return error.status;
+  if (error.status === 429 || error.code === "rate_limit_exceeded") return 429;
+  return 500;
+}
+
+function messageForError(error) {
+  if (error.status === 429 || error.code === "rate_limit_exceeded") {
+    return "OpenAI rate limit reached. Please wait a moment and try again.";
+  }
+  return error.message || "Something went wrong while analysing the CV.";
 }

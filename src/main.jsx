@@ -132,13 +132,11 @@ const cvTemplates = [
 ];
 
 const emptyAnalysis = {
-  score: 0,
   atsScore: 0,
-  summary: "",
   strengths: [],
   weaknesses: [],
-  missingSkills: [],
-  suggestedImprovements: []
+  missingKeywords: [],
+  suggestions: []
 };
 
 function App() {
@@ -155,13 +153,13 @@ function App() {
 
   const canAnalyse = Boolean(file) && !isLoading;
   const matchLabel = useMemo(() => {
-    if (!analysis.missingSkills.length) return "Keyword coverage looks healthy";
-    return `${analysis.missingSkills.length} likely gap${analysis.missingSkills.length === 1 ? "" : "s"} found`;
-  }, [analysis.missingSkills.length]);
+    if (!analysis.missingKeywords.length) return "Keyword coverage looks healthy";
+    return `${analysis.missingKeywords.length} likely gap${analysis.missingKeywords.length === 1 ? "" : "s"} found`;
+  }, [analysis.missingKeywords.length]);
 
   const progressDelta = useMemo(() => {
     if (!meta || history.length < 2) return null;
-    return history[0].score - history[1].score;
+    return history[0].atsScore - history[1].atsScore;
   }, [history, meta]);
 
   useEffect(() => {
@@ -224,10 +222,9 @@ function App() {
       date: new Date().toISOString(),
       fileName: nextMeta.fileName,
       wordCount: nextMeta.wordCount,
-      score: nextAnalysis.score,
       atsScore: nextAnalysis.atsScore,
-      missingSkillsCount: nextAnalysis.missingSkills.length,
-      summary: nextAnalysis.summary
+      missingKeywordsCount: nextAnalysis.missingKeywords.length,
+      summary: buildReviewSummary(nextAnalysis)
     };
 
     setHistory(previous => [review, ...previous].slice(0, 5));
@@ -504,14 +501,8 @@ function Results({ analysis, meta, matchLabel, progressDelta }) {
     <section className="animate-in grid gap-5" style={{ animationDelay: "160ms" }}>
       <div className="grid gap-4 sm:grid-cols-3">
         <ScoreCard label="ATS score" value={hasResults ? analysis.atsScore : "-"} text="Structure, scanability and keyword readiness" tone="mint" />
-        <ScoreCard
-          label="Overall score"
-          value={hasResults ? analysis.score : "-"}
-          text={hasResults ? analysis.summary : "Upload a PDF to begin"}
-          tone="coral"
-          delta={progressDelta}
-        />
-        <ScoreCard label="Skill gaps" value={hasResults ? analysis.missingSkills.length : "-"} text={hasResults ? matchLabel : "Add a job description for better targeting"} tone="ocean" />
+        <ScoreCard label="Progress" value={hasResults ? analysis.atsScore : "-"} text={hasResults ? "Compared with your previous saved review" : "Upload a PDF to begin"} tone="coral" delta={progressDelta} />
+        <ScoreCard label="Keyword gaps" value={hasResults ? analysis.missingKeywords.length : "-"} text={hasResults ? matchLabel : "Useful terms the CV may be missing"} tone="ocean" />
       </div>
 
       <section className="rounded-lg border border-white/80 bg-white/85 p-5 shadow-soft backdrop-blur">
@@ -523,8 +514,8 @@ function Results({ analysis, meta, matchLabel, progressDelta }) {
           <div className="grid gap-5">
             <InsightList title="Strengths" items={analysis.strengths} tone="mint" />
             <InsightList title="Weaknesses" items={analysis.weaknesses} tone="amber" />
-            <InsightList title="Missing skills" items={analysis.missingSkills} tone="blue" />
-            <InsightList title="Suggested improvements" items={analysis.suggestedImprovements} tone="slate" />
+            <InsightList title="Missing keywords" items={analysis.missingKeywords} tone="blue" />
+            <InsightList title="Suggestions" items={analysis.suggestions} tone="slate" />
           </div>
         ) : (
           <div className="rounded-lg bg-white/70 p-6 text-slate-600">
@@ -617,7 +608,7 @@ function HistoryPanel({ history, onClear }) {
         <ol className="grid gap-3">
           {history.map((review, index) => {
             const previous = history[index + 1];
-            const delta = previous ? review.score - previous.score : null;
+            const delta = previous ? review.atsScore - previous.atsScore : null;
 
             return (
               <li className="animate-in rounded-lg border border-teal-100 bg-gradient-to-r from-white to-teal-50/70 p-4" key={review.id}>
@@ -630,7 +621,7 @@ function HistoryPanel({ history, onClear }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-mint shadow-sm">{review.score}/100</span>
+                    <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-mint shadow-sm">{review.atsScore}/100</span>
                     {typeof delta === "number" ? (
                       <span className={`rounded-full px-2 py-1 text-xs font-black ${delta >= 0 ? "bg-teal-100 text-mint" : "bg-rose-100 text-coral"}`}>
                         {delta >= 0 ? "+" : ""}
@@ -656,10 +647,22 @@ function HistoryPanel({ history, onClear }) {
 function loadReviewHistory() {
   try {
     const stored = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-    return Array.isArray(stored) ? stored.slice(0, 5) : [];
+    return Array.isArray(stored)
+      ? stored.slice(0, 5).map(review => ({
+        ...review,
+        atsScore: review.atsScore ?? review.score ?? 0,
+        missingKeywordsCount: review.missingKeywordsCount ?? review.missingSkillsCount ?? 0
+      }))
+      : [];
   } catch {
     return [];
   }
+}
+
+function buildReviewSummary(analysis) {
+  if (analysis.suggestions.length) return analysis.suggestions[0];
+  if (analysis.weaknesses.length) return analysis.weaknesses[0];
+  return "CV analysed successfully.";
 }
 
 function formatDate(date) {

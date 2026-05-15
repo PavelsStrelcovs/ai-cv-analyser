@@ -25,7 +25,10 @@ Recent improvements added:
 
 - local job description matching without extra OpenAI calls
 - downloadable text review reports
+- downloadable template-based CV PDFs
 - richer local progress history with delete and trend stats
+- CV version comparison between two saved reviews
+- demo CV review that does not call OpenAI
 - API rate limiting to protect OpenAI usage
 - backend helper tests with Node's built-in test runner
 - React split into components, data and utility modules
@@ -75,7 +78,7 @@ Main frontend components:
 - `UploadPanel.jsx`: PDF upload, drag-and-drop and privacy note
 - `Results.jsx`: score cards, AI feedback, local match display and report download
 - `HistoryPanel.jsx`: last 5 reviews, trend stats and delete/clear actions
-- `TemplatesPage.jsx`: industry CV templates and template preview
+- `TemplatesPage.jsx`: industry CV templates, template preview and browser-based CV builder
 - `ScoreCard.jsx`: reusable score display
 - `InsightList.jsx`: reusable feedback list
 
@@ -90,6 +93,7 @@ Utility files:
 - `history.js`: load/migrate local review history and format dates
 - `jobMatch.js`: local keyword matching against pasted job descriptions
 - `exportReport.js`: creates a downloadable text report in the browser
+- `demoReview.js`: contains the free demo CV analysis result
 
 `src/styles.css`
 
@@ -178,6 +182,8 @@ When the user clicks Analyse:
 4. It waits for JSON from the backend.
 5. If the request fails, the error message is shown.
 6. If it succeeds, the app displays the result and saves a small review summary to history.
+
+The "Try demo CV" button loads a prewritten sample review from the frontend. It does not upload a file and does not call OpenAI.
 
 The frontend never calls OpenAI directly. It only calls the backend route.
 
@@ -342,6 +348,8 @@ Examples:
 - "OpenAI rate limit reached."
 - "Too many analyses from this browser."
 
+For scanned PDFs, the backend now gives a clearer explanation that image-based PDFs may need OCR or a proper text-based export from Word/Google Docs.
+
 ## 8a. Local Job Matching
 
 The app includes local job description matching.
@@ -392,6 +400,7 @@ Added progress features:
 - show best score
 - show overall trend from oldest to newest saved review
 - show how many of the 5 slots are used
+- select two saved reviews and compare ATS score and keyword-gap changes
 
 Why this is useful:
 
@@ -422,6 +431,16 @@ Each template contains:
 The templates are static frontend data. They do not call the backend or OpenAI.
 
 This makes the page fast and free to use.
+
+The template page also includes a simple browser-based CV builder:
+
+1. User chooses an industry template.
+2. User fills fields such as name, headline, profile, skills, experience, projects and education.
+3. User can load template starter text.
+4. User can preview the CV.
+5. User can download the generated CV as a PDF using `jsPDF`.
+
+This does not call OpenAI.
 
 Industries included:
 
@@ -465,15 +484,15 @@ OPENAI_MODEL=gpt-4o-mini
 
 Do not add `PORT` on Vercel.
 
-## 11a. Report Export
+## 11a. PDF Export
 
-The app can download a text report after analysis.
+The app can download a PDF report after analysis.
 
 This happens entirely in the browser:
 
 1. `Results.jsx` calls `downloadReviewReport()`.
-2. `exportReport.js` creates a plain text report.
-3. The browser downloads it using a temporary `Blob` URL.
+2. `exportReport.js` creates a styled PDF with `jsPDF`.
+3. The browser downloads the PDF.
 
 No backend call is made, and no OpenAI credits are used.
 
@@ -562,6 +581,10 @@ If asked about limitations:
 If asked about privacy:
 
 "The app does not store uploaded files on the server. The file is handled in memory, text is extracted, and only a small review summary is stored in the user's browser."
+
+If asked about demo mode:
+
+"The demo CV is a static sample analysis stored in the frontend. It lets people try the interface without uploading a real CV and without triggering an OpenAI request."
 
 If asked what you would improve:
 

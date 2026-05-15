@@ -1,7 +1,31 @@
 import { BarChart3, Clock3, Trash2, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { formatDate } from "../utils/history";
 
 export function HistoryPanel({ history, onClear, onDelete }) {
+  const [selectedIds, setSelectedIds] = useState([]);
+  const comparison = useMemo(() => {
+    if (selectedIds.length !== 2) return null;
+    const selected = selectedIds
+      .map(id => history.find(review => review.id === id))
+      .filter(Boolean);
+    if (selected.length !== 2) return null;
+    const [first, second] = selected.sort((a, b) => new Date(a.date) - new Date(b.date));
+    return {
+      older: first,
+      newer: second,
+      scoreDelta: second.atsScore - first.atsScore,
+      keywordDelta: (second.missingKeywordsCount || 0) - (first.missingKeywordsCount || 0)
+    };
+  }, [history, selectedIds]);
+
+  function toggleSelected(id) {
+    setSelectedIds(current => {
+      if (current.includes(id)) return current.filter(item => item !== id);
+      return [...current, id].slice(-2);
+    });
+  }
+
   return (
     <section className="rounded-lg border border-white/80 bg-white/80 p-5 shadow-soft backdrop-blur">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -24,6 +48,7 @@ export function HistoryPanel({ history, onClear, onDelete }) {
       {history.length ? (
         <>
           <HistoryStats history={history} />
+          <ComparisonPanel comparison={comparison} selectedCount={selectedIds.length} />
           <ol className="mt-4 grid gap-3">
             {history.map((review, index) => {
               const previous = history[index + 1];
@@ -40,6 +65,13 @@ export function HistoryPanel({ history, onClear, onDelete }) {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        className={`rounded-full px-3 py-1 text-xs font-black transition ${selectedIds.includes(review.id) ? "bg-ink text-white" : "bg-white text-slate-600 hover:bg-teal-50 hover:text-mint"}`}
+                        type="button"
+                        onClick={() => toggleSelected(review.id)}
+                      >
+                        Compare
+                      </button>
                       <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-mint shadow-sm">{review.atsScore}/100</span>
                       {typeof delta === "number" ? (
                         <span className={`rounded-full px-2 py-1 text-xs font-black ${delta >= 0 ? "bg-teal-100 text-mint" : "bg-rose-100 text-coral"}`}>
@@ -69,6 +101,35 @@ export function HistoryPanel({ history, onClear, onDelete }) {
         </div>
       )}
     </section>
+  );
+}
+
+function ComparisonPanel({ comparison, selectedCount }) {
+  if (!comparison) {
+    return (
+      <div className="mt-4 rounded-lg border border-teal-100 bg-white/70 p-4 text-sm leading-6 text-slate-600">
+        Select two saved reviews to compare progress. Selected: {selectedCount}/2.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-teal-100 bg-gradient-to-r from-white to-teal-50/80 p-4">
+      <p className="text-sm font-black uppercase text-mint">Version comparison</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <span className="rounded-lg bg-white/80 p-3 text-sm font-bold text-slate-700">
+          {comparison.older.atsScore} to {comparison.newer.atsScore} ATS
+        </span>
+        <span className={`rounded-lg p-3 text-sm font-black ${comparison.scoreDelta >= 0 ? "bg-teal-100 text-mint" : "bg-rose-100 text-coral"}`}>
+          Score: {comparison.scoreDelta >= 0 ? "+" : ""}
+          {comparison.scoreDelta}
+        </span>
+        <span className={`rounded-lg p-3 text-sm font-black ${comparison.keywordDelta <= 0 ? "bg-teal-100 text-mint" : "bg-rose-100 text-coral"}`}>
+          Keyword gaps: {comparison.keywordDelta >= 0 ? "+" : ""}
+          {comparison.keywordDelta}
+        </span>
+      </div>
+    </div>
   );
 }
 

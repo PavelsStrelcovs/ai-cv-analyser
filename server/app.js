@@ -46,7 +46,7 @@ app.post("/api/analyse", rateLimit, upload.single("cv"), async (req, res) => {
 
     if (!cvText) {
       return res.status(400).json({
-        error: "No readable CV text was found. Try a text-based PDF rather than a scanned image."
+        error: "No readable CV text was found. This often happens with scanned/image PDFs. Export your CV from Word or Google Docs as a text-based PDF, or use OCR before uploading."
       });
     }
 

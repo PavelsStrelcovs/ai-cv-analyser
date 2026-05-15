@@ -5,6 +5,7 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { Results } from "./components/Results";
 import { TemplatesPage } from "./components/TemplatesPage";
 import { UploadPanel } from "./components/UploadPanel";
+import { demoReview } from "./data/demoReview";
 import { buildReviewSummary, HISTORY_KEY, loadReviewHistory } from "./utils/history";
 import { calculateLocalJobMatch } from "./utils/jobMatch";
 import "./styles.css";
@@ -169,6 +170,14 @@ function App() {
                 {isLoading ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Sparkles className="h-5 w-5" aria-hidden="true" />}
                 {isLoading ? "Analysing CV" : "Analyse CV"}
               </button>
+              <button
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-teal-100 bg-white/85 px-5 font-black text-mint shadow-soft transition hover:-translate-y-0.5 hover:bg-teal-50"
+                type="button"
+                onClick={() => loadDemoReview()}
+              >
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                Try demo CV
+              </button>
 
               <HowItWorks />
               <HistoryPanel
@@ -184,6 +193,20 @@ function App() {
       </div>
     </main>
   );
+
+  function loadDemoReview() {
+    const nextMeta = {
+      fileName: demoReview.fileName,
+      wordCount: demoReview.wordCount,
+      preview: demoReview.preview,
+      cached: true
+    };
+    setError("");
+    setFile(null);
+    setAnalysis(demoReview.analysis);
+    setMeta(nextMeta);
+    saveReview(demoReview.analysis, nextMeta);
+  }
 }
 
 function Header() {
